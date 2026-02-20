@@ -81,8 +81,10 @@ class InnerNode extends BPlusNode {
     @Override
     public LeafNode get(DataBox key) {
         // TODO(proj2): implement
+        int childIndex = numLessThanEqual(key, keys); // funciton chooses the child index
 
-        return null;
+        BPlusNode child = getChild(childIndex);
+        return child.get(key);
     }
 
     // See BPlusNode.getLeftmostLeaf.
@@ -90,8 +92,8 @@ class InnerNode extends BPlusNode {
     public LeafNode getLeftmostLeaf() {
         assert(children.size() > 0);
         // TODO(proj2): implement
-
-        return null;
+        BPlusNode child = getChild(0);
+        return child.getLeftmostLeaf();
     }
 
     // See BPlusNode.put.
@@ -99,15 +101,111 @@ class InnerNode extends BPlusNode {
     public Optional<Pair<DataBox, Long>> put(DataBox key, RecordId rid) {
         // TODO(proj2): implement
 
-        return Optional.empty();
+        // find the child to descend into
+        int childIndex = numLessThanEqual(key, keys);
+        BPlusNode child = getChild(childIndex);
+
+        // recursively put into the child
+        Optional<Pair<DataBox, Long>> result = child.put(key, rid);
+
+        // no split
+        if (!result.isPresent()) {
+            return Optional.empty();
+        }
+
+        // split occurred - we need to insert the new key and child pointer
+        Pair<DataBox, Long> splitInfo = result.get();
+        DataBox splitKey = splitInfo.getFirst();
+        Long newChildPageNum = splitInfo.getSecond();
+
+        // find where to insert the split key
+        int insertIndex = numLessThan(splitKey, keys);
+
+        // insert the key and new child pointer
+        keys.add(insertIndex, splitKey);
+        children.add(insertIndex + 1, newChildPageNum);
+
+        // Check if we need to split this inner node (more than 2d keys)
+        int d = metadata.getOrder();
+        if (keys.size() <= 2 * d) {
+            // No split needed
+            sync();
+            return Optional.empty();
+        }
+
+        // Split: keys[0..d) stay, keys[d] moves up, keys[d+1..2d+1) go to new node
+        List<DataBox> rightKeys = new ArrayList<>(keys.subList(d + 1, keys.size()));
+        List<Long> rightChildren = new ArrayList<>(children.subList(d + 1, children.size()));
+
+        // The middle key moves up to the parent
+        DataBox pushUpKey = keys.get(d);
+
+        // Create new right sibling inner node
+        InnerNode rightSibling = new InnerNode(metadata, bufferManager, rightKeys,
+                rightChildren, treeContext);
+
+        // Update this node: keep first d keys and d+1 children
+        keys = new ArrayList<>(keys.subList(0, d));
+        children = new ArrayList<>(children.subList(0, d + 1));
+
+        sync();
+
+        // Return the pushed up key and right sibling's page number
+        return Optional.of(new Pair<>(pushUpKey, rightSibling.getPage().getPageNum()));
     }
 
     // See BPlusNode.bulkLoad.
     @Override
     public Optional<Pair<DataBox, Long>> bulkLoad(Iterator<Pair<DataBox, RecordId>> data,
-            float fillFactor) {
+                                                  float fillFactor) {
         // TODO(proj2): implement
 
+        // keep bulk loading into rightmost child
+        while (data.hasNext()) {
+            // get rightmost child
+            BPlusNode rightmostChild = getChild(children.size() - 1);
+
+            // bulk load into it
+            Optional<Pair<DataBox, Long>> result = rightmostChild.bulkLoad(data, fillFactor);
+
+            // no split means were done
+            if (!result.isPresent()) {
+                sync();
+                return Optional.empty();
+            }
+
+            // child split so insert new key and child pointer
+            Pair<DataBox, Long> splitInfo = result.get();
+            DataBox splitKey = splitInfo.getFirst();
+            Long newChildPageNum = splitInfo.getSecond();
+
+            // add to end cuz data is sorted
+            keys.add(splitKey);
+            children.add(newChildPageNum);
+
+            // check if we gotta split this inner node too
+            int d = metadata.getOrder();
+            if (keys.size() > 2 * d) {
+                // split like put does, middle key goes up
+                List<DataBox> rightKeys = new ArrayList<>(keys.subList(d + 1, keys.size()));
+                List<Long> rightChildren = new ArrayList<>(children.subList(d + 1, children.size()));
+
+                DataBox pushUpKey = keys.get(d);
+
+                InnerNode rightSibling = new InnerNode(metadata, bufferManager, rightKeys,
+                        rightChildren, treeContext);
+
+                // keep first d keys and d+1 children
+                keys = new ArrayList<>(keys.subList(0, d));
+                children = new ArrayList<>(children.subList(0, d + 1));
+
+                sync();
+
+                return Optional.of(new Pair<>(pushUpKey, rightSibling.getPage().getPageNum()));
+            }
+        }
+
+        sync();
         return Optional.empty();
     }
 
@@ -116,7 +214,11 @@ class InnerNode extends BPlusNode {
     public void remove(DataBox key) {
         // TODO(proj2): implement
 
-        return;
+        // find child that contains /would contain the key
+        int childIndex = numLessThanEqual(key, keys);
+        BPlusNode child = getChild(childIndex);
+
+        child.remove(key); // remove child
     }
 
     // Helpers /////////////////////////////////////////////////////////////////
