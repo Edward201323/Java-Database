@@ -140,6 +140,108 @@ public class SortMergeOperator extends JoinOperator {
          */
         private Record fetchNextRecord() {
             // TODO(proj3_part1): implement
+            while(leftRecord != null) {
+                if (rightRecord == null) {
+                    if (!marked) {
+                        return null;
+                    }
+
+                    if (leftIterator.hasNext()) {
+                        leftRecord = leftIterator.next();
+                    } else {
+                        leftRecord = null;
+                    }
+
+                    if (leftRecord == null) {
+                        return null;
+                    }
+
+                    rightIterator.reset();
+
+                    if (rightIterator.hasNext()) {
+                        rightRecord = rightIterator.next();
+                    } else {
+                        rightRecord = null;
+                    }
+
+                    if (rightRecord == null) {
+                        return null;
+                    }
+
+                    if (compare(leftRecord, rightRecord) != 0) {
+                        marked = false;
+                    }
+                } else {
+                    int cmp = compare(leftRecord, rightRecord);
+
+                    if (!marked) {
+                        if (cmp == 0) {
+                            rightIterator.markPrev();
+                            marked = true;
+
+                            Record result = leftRecord.concat(rightRecord);
+
+                            if (rightIterator.hasNext()) {
+                                rightRecord = rightIterator.next();
+                            } else {
+                                rightRecord = null;
+                            }
+
+                            return result;
+                        } else if (cmp < 0) {
+                            if (leftIterator.hasNext()) {
+                                leftRecord = leftIterator.next();
+                            } else {
+                                leftRecord = null;
+                            }
+                        } else {
+                            if (rightIterator.hasNext()) {
+                                rightRecord = rightIterator.next();
+                            } else {
+                                rightRecord = null;
+                            }
+                        }
+                    } else {
+                        if (cmp == 0) {
+                            Record result = leftRecord.concat(rightRecord);
+
+                            if (rightIterator.hasNext()) {
+                                rightRecord = rightIterator.next();
+                            } else {
+                                rightRecord = null;
+                            }
+
+                            return result;
+                        } else {
+                            if (leftIterator.hasNext()) {
+                                leftRecord = leftIterator.next();
+                            } else {
+                                leftRecord = null;
+                            }
+
+                            if (leftRecord == null) {
+                                return null;
+                            }
+
+                            rightIterator.reset();
+
+                            if (rightIterator.hasNext()) {
+                                rightRecord = rightIterator.next();
+                            } else {
+                                rightRecord = null;
+                            }
+
+                            if (rightRecord == null) {
+                                return null;
+                            }
+
+                            if (compare(leftRecord, rightRecord) != 0) {
+                                marked = false;
+                            }
+                        }
+                    }
+                }
+            }
             return null;
         }
 

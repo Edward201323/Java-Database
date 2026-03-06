@@ -87,7 +87,12 @@ public class SortOperator extends QueryOperator {
      */
     public Run sortRun(Iterator<Record> records) {
         // TODO(proj3_part1): implement
-        return null;
+        List<Record> list = new ArrayList<>();
+        while(records.hasNext()) {
+            list.add(records.next());
+        }
+        list.sort(comparator);
+        return makeRun(list);
     }
 
     /**
@@ -108,7 +113,22 @@ public class SortOperator extends QueryOperator {
     public Run mergeSortedRuns(List<Run> runs) {
         assert (runs.size() <= this.numBuffers - 1);
         // TODO(proj3_part1): implement
-        return null;
+        PriorityQueue<Pair<Record, Integer>> pq = new PriorityQueue<>(new RecordPairComparator());
+        List<Iterator<Record>> iterators = new ArrayList<>();
+        for (Run run : runs){
+            iterators.add(run.iterator());
+        }
+        for (int i = 0; i < iterators.size(); i++) {
+            if (iterators.get(i).hasNext()) pq.add(new Pair<>(iterators.get(i).next(), i));
+        }
+        Run result = makeRun();
+        while(!pq.isEmpty()) {
+            Pair<Record, Integer> min = pq.poll();
+            result.add(min.getFirst());
+            int i = min.getSecond();
+            if (iterators.get(i).hasNext()) pq.add(new Pair<>(iterators.get(i).next(), i));
+        }
+        return result;
     }
 
     /**
@@ -133,7 +153,12 @@ public class SortOperator extends QueryOperator {
      */
     public List<Run> mergePass(List<Run> runs) {
         // TODO(proj3_part1): implement
-        return Collections.emptyList();
+        List<Run> result = new ArrayList<>();
+        int mergeSize = numBuffers - 1;
+        for (int i = 0; i < runs.size(); i += mergeSize) {
+            result.add(mergeSortedRuns(runs.subList(i, Math.min(i + mergeSize, runs.size()))));
+        }
+        return result;
     }
 
     /**
@@ -149,7 +174,20 @@ public class SortOperator extends QueryOperator {
         Iterator<Record> sourceIterator = getSource().iterator();
 
         // TODO(proj3_part1): implement
-        return makeRun(); // TODO(proj3_part1): replace this!
+        // Pass 0: create sorted runs of B pages each
+        List<Run> runs = new ArrayList<>();
+        while(sourceIterator.hasNext()) {
+            runs.add(sortRun(getBlockIterator(sourceIterator, getSchema(), numBuffers)));
+        }
+        // Merge passes until one run remains
+        while(runs.size() > 1) {
+            runs = mergePass(runs);
+        }
+        if (runs.isEmpty()) {
+            return makeRun();
+        } else {
+            return runs.get(0);
+        }
     }
 
     /**
