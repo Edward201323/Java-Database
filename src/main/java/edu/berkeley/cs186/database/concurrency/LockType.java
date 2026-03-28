@@ -21,8 +21,35 @@ public enum LockType {
         if (a == null || b == null) {
             throw new NullPointerException("null lock type");
         }
-        // TODO(proj4_part1): implement
-
+        // nl is compatible with everything
+        if (a == NL || b == NL) {
+            return true;
+        }
+        // x is exclusive - incompatible with everything except nl
+        if (a == X || b == X) {
+            return false;
+        }
+        // is is compatible with is, ix, s, six (everything remaining except x which is handled)
+        if (a == IS) {
+            return true;
+        }
+        if (b == IS) {
+            return true;
+        }
+        // remaining types are ix, s, six
+        // ix is compatible only with ix (and is which is handled above)
+        if (a == IX) {
+            return b == IX;
+        }
+        if (b == IX) {
+            return false;
+        }
+        // remaining types are s and six
+        // s is compatible only with s (and is, ix which are handled)
+        if (a == S) {
+            return b == S;
+        }
+        // a == six: six is incompatible with s and six
         return false;
     }
 
@@ -53,9 +80,16 @@ public enum LockType {
         if (parentLockType == null || childLockType == null) {
             throw new NullPointerException("null lock type");
         }
-        // TODO(proj4_part1): implement
-
-        return false;
+        // any lock type can be parent of nl
+        if (childLockType == NL) {
+            return true;
+        }
+        // six special case: cannot have is, s, or six children (redundant)
+        if (parentLockType == SIX) {
+            return childLockType == IX || childLockType == X;
+        }
+        // otherwise check if parent substitutes the required parent lock for child
+        return substitutable(parentLockType, parentLock(childLockType));
     }
 
     /**
@@ -68,8 +102,40 @@ public enum LockType {
         if (required == null || substitute == null) {
             throw new NullPointerException("null lock type");
         }
-        // TODO(proj4_part1): implement
-
+        // same lock always substitutes itself
+        if (substitute == required) {
+            return true;
+        }
+        // anything substitutes nl
+        if (required == NL) {
+            return true;
+        }
+        // nl substitutes nothing else
+        if (substitute == NL) {
+            return false;
+        }
+        // x substitutes everything
+        if (substitute == X) {
+            return true;
+        }
+        // nothing else substitutes x
+        if (required == X) {
+            return false;
+        }
+        // lattice order: nl < is < s < six < x  and  nl < is < ix < six < x
+        // six substitutes s, ix, and is
+        if (substitute == SIX) {
+            return required == S || required == IX || required == IS;
+        }
+        // s substitutes is (s >= is in the s-branch of the lattice)
+        if (substitute == S) {
+            return required == IS;
+        }
+        // ix substitutes is (ix >= is in the ix-branch of the lattice)
+        if (substitute == IX) {
+            return required == IS;
+        }
+        // is only substitutes nl and itself (both handled above)
         return false;
     }
 
