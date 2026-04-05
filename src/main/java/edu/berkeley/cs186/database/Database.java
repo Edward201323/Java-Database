@@ -934,7 +934,16 @@ public class Database implements AutoCloseable {
         @Override
         public void close() {
             try {
-                // TODO(proj4_part2)
+                // release all locks held by this transaction, deepest first to respect hierarchy
+                List<Lock> locks = lockManager.getLocks(this);
+                locks.sort((a, b) -> {
+                    long depthA = a.name.toString().chars().filter(c -> c == '/').count();
+                    long depthB = b.name.toString().chars().filter(c -> c == '/').count();
+                    return Long.compare(depthB, depthA);
+                });
+                for (Lock lock : locks) {
+                    lockManager.release(this, lock.name);
+                }
                 return;
             } catch (Exception e) {
                 // There's a chance an error message from your release phase
